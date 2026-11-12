@@ -13,7 +13,6 @@ browser. Blueprint: FitCraft AI Product Blueprint v2.
 
     npm run build
     firebase login
-    firebase use --add            # pick the FitCraft project
     firebase deploy --only hosting
 
 ## What to test with tailors
