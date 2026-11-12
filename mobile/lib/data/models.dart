@@ -92,9 +92,17 @@ String naira(int n) {
 
 String today() => DateTime.now().toIso8601String().substring(0, 10);
 
+const _sampleInches = {
+  'Chest': '41', 'Bust': '38', 'Waist': '34', 'Hip': '42', 'Shoulder': '18', 'Sleeve': '24', 'Agbada length': '57',
+  'Top length': '30', 'Blouse length': '24', 'Wrapper length': '41', 'Gown length': '56', 'Trouser waist': '34',
+  'Trouser length': '40', 'Thigh': '24', 'Neck': '16', 'Cap': '22',
+};
+
 GroupOrder sampleOrder() {
   Guest g(String id, String name, String t, String fabric, int price, Stage stage, List<int> paid, {List<FitRecord>? fits}) => Guest(
         id: id, name: name, templateId: t, fabric: fabric, price: price, stage: stage, fits: fits,
+        measurements: stage == Stage.notMeasured ? {} : {for (final f in templateOf(t).fields) if (_sampleInches[f] != null) f: _sampleInches[f]!},
+        measuredBy: stage == Stage.notMeasured ? null : 'hand',
         payments: [for (var i = 0; i < paid.length; i++) Payment('2026-11-0${i + 2}', paid[i], i == 0 ? 'Transfer' : 'Cash')],
       );
   return GroupOrder('Bisi & Kunle wedding (sample)', '2026-12-19', 'Aunty Funke (sample)', [

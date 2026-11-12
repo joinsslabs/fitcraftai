@@ -1,10 +1,11 @@
 // Measure with photos: height → front photo → side photo → AI estimates → tailor reviews and confirms.
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../data/models.dart';
 import 'body_math.dart';
-import 'scanner.dart';
+import 'scanner.dart' if (dart.library.js_interop) 'scanner_web.dart';
 
 /// Returns the confirmed measurements (field → inches as text), or null if cancelled.
 class ScanScreen extends StatefulWidget {
@@ -69,6 +70,21 @@ class _ScanScreenState extends State<ScanScreen> {
     }
   }
 
+  bool demo = false;
+
+  /// Browser preview only: plausible sample values so the review screen can be tried. Never used on a phone.
+  void _showExample() {
+    const sample = {'chest': 99.0, 'waist': 86.0, 'hip': 104.0, 'shoulderWidth': 46.0, 'sleeve': 61.0, 'shoulderToWaist': 44.0,
+      'shoulderToHip': 56.0, 'shoulderToAnkle': 140.0, 'waistToAnkle': 102.0};
+    result = {for (final e in sample.entries) e.key: Measure(e.value, ['chest', 'waist', 'hip'].contains(e.key) ? Confidence.estimate : Confidence.good)};
+    for (final field in widget.template.fields) {
+      final src = fieldSource[field];
+      final m = src == null ? null : result[src];
+      fields[field] = TextEditingController(text: m == null ? '' : ((m.inches * 4).round() / 4).toString());
+    }
+    setState(() { demo = true; step = _Step.review; });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -108,6 +124,12 @@ class _ScanScreenState extends State<ScanScreen> {
           const SizedBox(height: 20),
           FilledButton.icon(onPressed: () => _take(front), icon: const Icon(Icons.photo_camera), label: Text(front ? 'Take front photo' : 'Take side photo')),
           TextButton(onPressed: () => _take(front, gallery: true), child: const Text('Use a photo from the gallery')),
+          if (kIsWeb) ...[
+            const SizedBox(height: 12),
+            Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(12)),
+                child: const Text('Browser preview: the photo AI runs in the Android app. Tap below to see what the result screen looks like.')),
+            OutlinedButton(onPressed: _showExample, child: const Text('Show an example result')),
+          ],
         ]);
       case _Step.working:
         return const Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -118,6 +140,8 @@ class _ScanScreenState extends State<ScanScreen> {
           Expanded(child: ListView(children: [
             Text('Check before saving', style: t.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
             const SizedBox(height: 4),
+            if (demo) Container(margin: const EdgeInsets.only(bottom: 8), padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.amber.shade100, borderRadius: BorderRadius.circular(10)),
+                child: const Text('Example values for the preview, not measured from any photo.')),
             const Text('AI estimates in inches. Correct anything that looks wrong; fields marked "measure by hand" need the tape.'),
             const SizedBox(height: 12),
             for (final f in widget.template.fields) _row(f),
