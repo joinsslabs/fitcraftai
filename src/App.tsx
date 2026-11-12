@@ -24,6 +24,7 @@ export default function App() {
             <button key={k} onClick={() => setView(k)} className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 ${view === k ? 'bg-stone-900 text-white' : 'bg-white text-stone-700 ring-1 ring-stone-300'}`}><Icon className="h-3.5 w-3.5" /> {label}</button>
           ))}
           <label className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-stone-700 ring-1 ring-stone-300"><input type="checkbox" checked={offline} onChange={e => setOffline(e.target.checked)} /> Simulate offline</label>
+          <a href="/app/" className="inline-flex items-center gap-1.5 rounded-full bg-emerald-700 px-3 py-1.5 text-white">Open the Flutter app preview</a>
           <button onClick={() => { if (confirm('Reset the sample data?')) setOrder(SEED); }} className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-stone-700 ring-1 ring-stone-300"><RotateCcw className="h-3.5 w-3.5" /> Reset</button>
         </div>
       </header>
