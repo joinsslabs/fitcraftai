@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../data/models.dart';
 import 'body_math.dart';
+import 'capture_screen.dart';
 import 'scanner.dart' if (dart.library.js_interop) 'scanner_web.dart';
 
 /// Returns the confirmed measurements (field → inches as text), or null if cancelled.
@@ -29,18 +30,25 @@ class _ScanScreenState extends State<ScanScreen> {
   double? get heightCm => double.tryParse(_height.text.trim());
 
   Future<void> _take(bool front, {bool gallery = false}) async {
-    final x = await _picker.pickImage(source: gallery ? ImageSource.gallery : ImageSource.camera, maxWidth: 1600, imageQuality: 90);
-    if (x == null) return;
+    // The in-app camera (live preview + outline + timer); the gallery uses the system picker.
+    final path = gallery
+        ? (await _picker.pickImage(source: ImageSource.gallery, maxWidth: 1600, imageQuality: 90))?.path
+        : await Navigator.push<String>(context, MaterialPageRoute(builder: (_) => CaptureScreen(front: front)));
+    if (path == null || !mounted) return;
     setState(() {
       error = null;
       if (front) {
-        frontPath = x.path;
+        frontPath = path;
         step = _Step.side;
       } else {
-        sidePath = x.path;
+        sidePath = path;
       }
     });
-    if (!front) await _analyse();
+    if (!front) {
+      // In the browser there is no on-device AI (ML Kit runs on Android), so show a labelled example.
+      if (kIsWeb) { _showExample(); return; }
+      await _analyse();
+    }
   }
 
   Future<void> _analyse() async {
@@ -141,7 +149,7 @@ class _ScanScreenState extends State<ScanScreen> {
             Text('Check before saving', style: t.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
             const SizedBox(height: 4),
             if (demo) Container(margin: const EdgeInsets.only(bottom: 8), padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.amber.shade100, borderRadius: BorderRadius.circular(10)),
-                child: const Text('Example values for the preview, not measured from any photo.')),
+                child: const Text('Browser preview: these are example values, not measured from your photos. The AI measurement runs in the FitCraft Android app.')),
             const Text('AI estimates in inches. Correct anything that looks wrong; fields marked "measure by hand" need the tape.'),
             const SizedBox(height: 12),
             for (final f in widget.template.fields) _row(f),
