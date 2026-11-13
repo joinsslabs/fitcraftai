@@ -16,6 +16,23 @@ class FitCraftApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: ThemeData(colorSchemeSeed: brand, useMaterial3: true, scaffoldBackgroundColor: const Color(0xFFF7F6F3)),
         home: const BoardScreen(),
+        // On a wide screen (a computer browser) show the app in a phone-sized frame so it looks and
+        // behaves like the phone app; on a phone it fills the screen.
+        builder: (context, child) {
+          final mq = MediaQuery.of(context);
+          if (mq.size.width < 600) return child!;
+          final h = (mq.size.height - 48).clamp(560.0, 900.0);
+          return ColoredBox(
+            color: const Color(0xFF0B1F1A),
+            child: Center(child: Container(
+              width: 412, height: h,
+              decoration: BoxDecoration(borderRadius: BorderRadius.circular(40), border: Border.all(color: const Color(0xFF111827), width: 10),
+                  boxShadow: const [BoxShadow(color: Color(0x66000000), blurRadius: 40, offset: Offset(0, 20))]),
+              child: ClipRRect(borderRadius: BorderRadius.circular(30),
+                  child: MediaQuery(data: mq.copyWith(size: Size(392, h - 20)), child: child!)),
+            )),
+          );
+        },
       );
 }
 
@@ -38,12 +55,13 @@ class BoardScreen extends StatefulWidget {
 
 class _BoardScreenState extends State<BoardScreen> {
   GroupOrder? order;
+  bool loaded = false;
   String filter = 'All';
 
   @override
   void initState() {
     super.initState();
-    Store.load().then((o) => setState(() => order = o));
+    Store.load().then((o) => setState(() { order = o; loaded = true; }));
   }
 
   void changed() {
@@ -65,7 +83,8 @@ class _BoardScreenState extends State<BoardScreen> {
   @override
   Widget build(BuildContext context) {
     final o = order;
-    if (o == null) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (!loaded) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (o == null) return WelcomeScreen(onStart: (created) { setState(() => order = created); Store.save(created); });
     final shown = o.guests.where((g) => filter == 'All' ? true : filter == 'Owing' ? g.owed > 0 : stageLabel[g.stage] == filter).toList();
     final measured = o.guests.where((g) => g.stage != Stage.notMeasured).length;
     final ready = o.guests.where((g) => g.stage.index >= Stage.fitted.index).length;
@@ -73,7 +92,22 @@ class _BoardScreenState extends State<BoardScreen> {
       body: CustomScrollView(slivers: [
         SliverAppBar(
           pinned: true, expandedHeight: 210, backgroundColor: brand, foregroundColor: Colors.white,
-          actions: [IconButton(tooltip: 'Coordinator view', icon: const Icon(Icons.groups), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CoordinatorScreen(order: o))))],
+          actions: [
+            IconButton(tooltip: 'Coordinator view', icon: const Icon(Icons.groups), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CoordinatorScreen(order: o)))),
+            PopupMenuButton<String>(
+              iconColor: Colors.white,
+              onSelected: (v) async {
+                if (v != 'new') return;
+                final ok = await showDialog<bool>(context: context, builder: (c) => AlertDialog(
+                  title: const Text('Start a new order?'),
+                  content: const Text('This removes the current order and its guests from this phone.'),
+                  actions: [TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Start new'))],
+                ));
+                if (ok == true) { await Store.clear(); setState(() => order = null); }
+              },
+              itemBuilder: (_) => const [PopupMenuItem(value: 'new', child: Text('Start a new order'))],
+            ),
+          ],
           flexibleSpace: FlexibleSpaceBar(background: Container(
             padding: const EdgeInsets.fromLTRB(16, 72, 16, 12),
             decoration: const BoxDecoration(gradient: LinearGradient(colors: [brand, Color(0xFF022C22)], begin: Alignment.topLeft, end: Alignment.bottomRight)),
@@ -82,7 +116,7 @@ class _BoardScreenState extends State<BoardScreen> {
               const SizedBox(height: 4),
               Text(o.event, style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w900)),
               const SizedBox(height: 10),
-              Row(children: [_stat('$measured/${o.guests.length}', 'Measured'), _stat('$ready/${o.guests.length}', 'Ready'), _stat('${(100 * o.paid / o.total).round()}%', 'Paid')]),
+              Row(children: [_stat('$measured/${o.guests.length}', 'Measured'), _stat('$ready/${o.guests.length}', 'Ready'), _stat(o.total == 0 ? '—' : '${(100 * o.paid / o.total).round()}%', 'Paid')]),
               const SizedBox(height: 6),
               Text('${naira(o.paid)} received · ${naira(o.total - o.paid)} owed', style: const TextStyle(color: Color(0xFFD1FAE5), fontSize: 12)),
             ]),
@@ -115,6 +149,15 @@ class _BoardScreenState extends State<BoardScreen> {
             );
           },
         ),
+        if (o.guests.isEmpty) SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.fromLTRB(24, 32, 24, 0), child: Column(children: [
+          const Icon(Icons.person_add_alt_1, size: 48, color: brand),
+          const SizedBox(height: 12),
+          const Text('No guests yet', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 6),
+          const Text('Add each guest with their outfit, fabric and price. Then measure them with photos, record payments and fittings.', textAlign: TextAlign.center, style: TextStyle(color: Colors.black54)),
+          const SizedBox(height: 16),
+          FilledButton.icon(onPressed: addGuest, icon: const Icon(Icons.person_add), label: const Text('Add your first guest')),
+        ]))),
         const SliverToBoxAdapter(child: SizedBox(height: 90)),
       ]),
       bottomNavigationBar: SafeArea(child: Padding(padding: const EdgeInsets.all(12), child: Row(children: [
@@ -302,4 +345,66 @@ class CoordinatorScreen extends StatelessWidget {
           const Text('Measurements are never shown here: they stay between each guest and the tailor.', style: TextStyle(color: Colors.black54, fontSize: 12)),
         ]),
       );
+}
+
+
+/// First launch: create a real group order, or explore the sample wedding.
+class WelcomeScreen extends StatefulWidget {
+  final void Function(GroupOrder) onStart;
+  const WelcomeScreen({super.key, required this.onStart});
+  @override
+  State<WelcomeScreen> createState() => _WelcomeScreenState();
+}
+
+class _WelcomeScreenState extends State<WelcomeScreen> {
+  final event = TextEditingController(), coordinator = TextEditingController();
+  DateTime? date;
+
+  @override
+  Widget build(BuildContext context) {
+    final ready = event.text.trim().isNotEmpty && date != null;
+    return Scaffold(
+      body: SafeArea(child: ListView(padding: const EdgeInsets.all(24), children: [
+        const SizedBox(height: 12),
+        Align(alignment: Alignment.centerLeft, child: Container(width: 56, height: 56, decoration: BoxDecoration(color: brand, borderRadius: BorderRadius.circular(16)), child: const Icon(Icons.content_cut, color: Colors.white))),
+        const SizedBox(height: 16),
+        const Text('Welcome to FitCraft', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900)),
+        const SizedBox(height: 6),
+        const Text('Run your next Aso-ebi or group order in one place: guests, measurements, payments and fittings.', style: TextStyle(color: Colors.black54)),
+        const SizedBox(height: 24),
+        const Text('Create your first group order', style: TextStyle(fontWeight: FontWeight.w800)),
+        const SizedBox(height: 10),
+        TextField(controller: event, onChanged: (_) => setState(() {}), decoration: const InputDecoration(labelText: 'Event (e.g. Ade & Tolu wedding)', border: OutlineInputBorder())),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          icon: const Icon(Icons.event),
+          label: Text(date == null ? 'Event date' : '${date!.day}/${date!.month}/${date!.year}'),
+          onPressed: () async {
+            final now = DateTime.now();
+            final d = await showDatePicker(context: context, firstDate: now, lastDate: now.add(const Duration(days: 730)), initialDate: now.add(const Duration(days: 30)));
+            if (d != null) setState(() => date = d);
+          },
+        ),
+        const SizedBox(height: 10),
+        TextField(controller: coordinator, decoration: const InputDecoration(labelText: 'Coordinator (optional)', border: OutlineInputBorder())),
+        const SizedBox(height: 16),
+        FilledButton(
+          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+          onPressed: ready ? () => widget.onStart(GroupOrder(event.text.trim(), date!.toIso8601String().substring(0, 10), coordinator.text.trim().isEmpty ? '—' : coordinator.text.trim(), [])) : null,
+          child: const Text('Create order'),
+        ),
+        const SizedBox(height: 28),
+        const Divider(),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+          icon: const Icon(Icons.play_circle_outline),
+          label: const Text('Explore with sample data'),
+          onPressed: () => widget.onStart(sampleOrder()),
+        ),
+        const SizedBox(height: 6),
+        const Text('Loads a made-up wedding with 8 guests so you can try every screen. You can start a real order later from the menu.', style: TextStyle(fontSize: 12, color: Colors.black54)),
+      ])),
+    );
+  }
 }

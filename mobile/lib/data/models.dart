@@ -120,16 +120,19 @@ GroupOrder sampleOrder() {
 
 class Store {
   static const _key = 'fitcraft_order_v1';
-  static Future<GroupOrder> load() async {
+  /// The saved order, or null on first launch (the app then shows its welcome screen).
+  static Future<GroupOrder?> load() async {
     final p = await SharedPreferences.getInstance();
     final s = p.getString(_key);
-    if (s == null) return sampleOrder();
+    if (s == null) return null;
     try {
       return GroupOrder.fromJson(jsonDecode(s));
     } catch (_) {
-      return sampleOrder();
+      return null;
     }
   }
+
+  static Future<void> clear() async => (await SharedPreferences.getInstance()).remove(_key);
 
   static Future<void> save(GroupOrder o) async => (await SharedPreferences.getInstance()).setString(_key, jsonEncode(o.toJson()));
 }
